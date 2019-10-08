@@ -38,27 +38,26 @@ class SCPIHandler:
         return parameters, annotations, return_type
 
     @classmethod
-    def combine(cls, function1: Callable, function2: Callable):
+    def combine(cls, handler1: 'SCPIHandler', handler2: 'SCPIHandler'):
 
-        parameters1, annotations1, _ = \
-            cls._get_params_and_annotations(function1)
+        parameters = dict(handler1.parameters)
+        annotations = dict(handler1.annotations)
 
-        parameters2, annotations2, return_type = \
-            cls._get_params_and_annotations(function2)
-
-        parameters = dict(parameters1)
-        annotations = dict(annotations1)
-
-        parameters.update(parameters2)
-        annotations.update(annotations2)
+        parameters.update(handler2.parameters)
+        annotations.update(handler2.annotations)
 
         def function(*args):
-            args1 = args[:len(parameters1)]
-            args2 = args[len(parameters1):]
-            self = function1(*args1)
-            return function2(self, *args2)
+            args1 = args[:len(handler1.parameters)]
+            args2 = args[len(handler1.parameters):]  # NOTE: This is *not* a bug... use 'handler1' here
 
-        return cls(function, parameters, annotations, return_type)
+            return handler2(
+                handler1(*args1),
+                *args2
+            )
+
+        return cls(
+            function, parameters, annotations, handler2.return_type
+        )
 
     def __init__(
             self,
@@ -119,9 +118,17 @@ class BaseMocker(metaclass=MockerMetaClass):
                 __tmp_scpi_dict__[scpi_string] = handler
                 return
 
-            for scpi, handler in return_type.__scpi_dict__.items():
-                __tmp_scpi_dict__[scpi_string + scpi] = SCPIHandler.combine(
-                    function, handler.function
+            # The function being decorated itself returns a Mocker. This is very
+            # useful as it allows mockers to be modular. Further processing of the
+            # scpi string will be handled by the submodule.
+            # For an example, see instruments.py in the folder 'tests\mock_instruments\'
+            # and specifically study the class 'Mocker3'
+
+            SubModule = return_type
+
+            for scpi_sub_string, sub_handler in SubModule.__scpi_dict__.items():
+                __tmp_scpi_dict__[scpi_string + scpi_sub_string] = SCPIHandler.combine(
+                    handler, sub_handler
                 )
 
         return decorator
@@ -130,14 +137,14 @@ class BaseMocker(metaclass=MockerMetaClass):
 
         found = False
         args = None
-        function = None
+        handler = None
 
         for regex_pattern in self.__scpi_dict__:
             search_result = re.search(regex_pattern, scpi_string)
             if search_result:
                 if not found:
                     found = True
-                    function = self.__scpi_dict__[regex_pattern]
+                    handler = self.__scpi_dict__[regex_pattern]
                     args = search_result.groups()
                 else:
                     raise MockingError(
@@ -148,7 +155,7 @@ class BaseMocker(metaclass=MockerMetaClass):
         if not found:
             raise ValueError(f"Unknown SCPI command {scpi_string}")
 
-        return str(function(self, *args))
+        return str(handler(self, *args))
 
 
 scpi = BaseMocker.scpi

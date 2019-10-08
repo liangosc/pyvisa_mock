@@ -61,13 +61,27 @@ class Mocker3(BaseMocker):
             2: MockerChannel()
         }
 
-    @scpi(r":INSTR:CHANNEL(.*)")
+    @scpi(r":CHANNEL(.*)")
     def _channel(self, number: int) -> MockerChannel:
         return self._channels[number]
+
+
+class Mocker4(BaseMocker):
+
+    def __init__(self):
+        self._instruments = {
+            1: Mocker3(),
+            2: Mocker3()
+        }
+
+    @scpi(r":INST(.*)")
+    def _channel(self, instrument_number: int) -> Mocker3:
+        return self._instruments[instrument_number]
 
 
 resources = {
     "MOCK0::mock1::INSTR": Mocker1(),
     "MOCK0::mock2::INSTR": Mocker2(),
     "MOCK0::mock3::INSTR": Mocker3(),
+    "MOCK0::mock4::INSTR": Mocker4(),
 }
