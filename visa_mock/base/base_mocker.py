@@ -6,48 +6,86 @@ import re
 __tmp_scpi_dict__: Dict[str, Callable] = {}
 
 
-def cast_from_annotation(function):
-    """
-    Cast function arguments to types given in the hints provided in the
-    type annotation.
-
-    Example:
-         >>> @cast_from_annotation
-         ... def f(x: int, y: float):
-         ...   return x + y
-         >>> f("2", "3.4")
-         ... 5.4
-    """
-    parameters = dict(signature(function).parameters)
-
-    annotations = {}
-    if "self" in parameters:
-        annotations["self"] = lambda x: x
-
-    annotations.update(get_type_hints(function))
-    annotations.pop("return", None)
-
-    if len(annotations) != len(parameters):
-        raise ValueError(
-            "This decorator requires all arguments to be annotated"
-        )
-
-    def inner(*args, **kwargs):
-
-        kwargs.update(dict(zip(annotations, args)))
-
-        new_kwargs = {
-            name: annotations[name](value)
-            for name, value in kwargs.items()
-        }
-
-        return function(**new_kwargs)
-
-    return inner
-
-
 class MockingError(Exception):
     pass
+
+
+class AnnotationError(Exception):
+    pass
+
+
+class SCPIHandler:
+
+    @staticmethod
+    def _get_params_and_annotations(function):
+        parameters = dict(signature(function).parameters)
+        annotations = {
+            "self": lambda x: x
+        }
+
+        annotations.update(get_type_hints(function))
+
+        try:
+            return_type = annotations.pop("return")
+        except KeyError:
+            raise AnnotationError("All functions must have an annotated return type")
+
+        if len(annotations) != len(parameters):
+            raise AnnotationError(
+                "This decorator requires all arguments to be annotated"
+            )
+
+        return parameters, annotations, return_type
+
+    @classmethod
+    def combine(cls, function1: Callable, function2: Callable):
+
+        parameters1, annotations1, _ = \
+            cls._get_params_and_annotations(function1)
+
+        parameters2, annotations2, return_type = \
+            cls._get_params_and_annotations(function2)
+
+        parameters = dict(parameters1)
+        annotations = dict(annotations1)
+
+        parameters.update(parameters2)
+        annotations.update(annotations2)
+
+        def function(*args):
+            args1 = args[:len(parameters1)]
+            args2 = args[len(parameters1):]
+            self = function1(*args1)
+            return function2(self, *args2)
+
+        return cls(function, parameters, annotations, return_type)
+
+    def __init__(
+            self,
+            function: Callable,
+            parameters: Dict = None,
+            annotations: Dict = None,
+            return_type: type = None
+    ):
+
+        self.function = function
+
+        if all([parameters, annotations, return_type]):
+            self.parameters = parameters
+            self.annotations = annotations
+            self.return_type = return_type
+            return
+
+        self.parameters, self.annotations, self.return_type = \
+            self._get_params_and_annotations(function)
+
+    def __call__(self, *args):
+
+        new_args = [
+            tp(value) for tp, value in zip(self.annotations.values(), args)
+        ]
+
+        return self.function(*new_args)
 
 
 class MockerMetaClass(type):
@@ -74,9 +112,17 @@ class BaseMocker(metaclass=MockerMetaClass):
     @classmethod
     def scpi(cls, scpi_string: str) -> Callable:
         def decorator(function):
-            __tmp_scpi_dict__[scpi_string] = cast_from_annotation(
-                function
-            )
+            handler = SCPIHandler(function)
+            return_type = handler.return_type
+
+            if not isinstance(return_type, MockerMetaClass):
+                __tmp_scpi_dict__[scpi_string] = handler
+                return
+
+            for scpi, handler in return_type.__scpi_dict__.items():
+                __tmp_scpi_dict__[scpi_string + scpi] = SCPIHandler.combine(
+                    function, handler.function
+                )
 
         return decorator
 
@@ -102,8 +148,7 @@ class BaseMocker(metaclass=MockerMetaClass):
         if not found:
             raise ValueError(f"Unknown SCPI command {scpi_string}")
 
-        new_function = function
-        return str(new_function(self, *args))
+        return str(function(self, *args))
 
 
 scpi = BaseMocker.scpi

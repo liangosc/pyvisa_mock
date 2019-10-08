@@ -1,4 +1,4 @@
-from visa_mock.test.mock_instruments.instruments import Mocker1, Mocker2
+from visa_mock.test.mock_instruments.instruments import Mocker1, Mocker2, Mocker3
 
 
 def test_base():
@@ -38,3 +38,16 @@ def test_one_of_each_kind():
     mocker2.send(":INSTR:CHANNEL1:VOLT 13.4")
     voltage = mocker2.send(":INSTR:CHANNEL1:VOLT?")
     assert voltage == "26.8"
+
+
+def test_modular_mock():
+
+    mocker3 = Mocker3()
+    mocker3.send(":INSTR:CHANNEL1:VOLT 12")
+    voltage = mocker3.send(":INSTR:CHANNEL1:VOLT?")
+    assert voltage == "12.0"
+
+    mocker3.send(":INSTR:CHANNEL2:VOLT 13.4")
+    voltage = mocker3.send(":INSTR:CHANNEL2:VOLT?")
+    assert voltage == "13.4"
+
