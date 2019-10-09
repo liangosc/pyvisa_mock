@@ -74,9 +74,9 @@ class Mocker4(BaseMocker):
             2: Mocker3()
         }
 
-    @scpi(r":INST(.*)")
-    def _channel(self, instrument_number: int) -> Mocker3:
-        return self._instruments[instrument_number]
+    @scpi(r":INSTR(.*)")
+    def _channel(self, number: int) -> Mocker3:
+        return self._instruments[number]
 
 
 resources = {

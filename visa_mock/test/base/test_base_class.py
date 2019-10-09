@@ -55,10 +55,27 @@ def test_modular_mock():
 def test_modular_2_mock():
 
     mocker4 = Mocker4()
-    mocker4.send(":INST1:CHANNEL1:VOLT 12")
-    voltage = mocker4.send(":INST1:CHANNEL1:VOLT?")
+
+    voltage = mocker4.send(":INSTR1:CHANNEL1:VOLT?")
+    assert voltage == "0"
+    mocker4.send(":INSTR1:CHANNEL1:VOLT 12")
+    voltage = mocker4.send(":INSTR1:CHANNEL1:VOLT?")
     assert voltage == "12.0"
 
-    mocker4.send(":INST1:CHANNEL2:VOLT 13.4")
-    voltage = mocker4.send(":INST1:CHANNEL2:VOLT?")
+    voltage = mocker4.send(":INSTR1:CHANNEL2:VOLT?")
+    assert voltage == "0"
+    mocker4.send(":INSTR1:CHANNEL2:VOLT 13.4")
+    voltage = mocker4.send(":INSTR1:CHANNEL2:VOLT?")
     assert voltage == "13.4"
+
+    voltage = mocker4.send(":INSTR2:CHANNEL1:VOLT?")
+    assert voltage == "0"
+    mocker4.send(":INSTR2:CHANNEL1:VOLT -12")
+    voltage = mocker4.send(":INSTR2:CHANNEL1:VOLT?")
+    assert voltage == "-12.0"
+
+    voltage = mocker4.send(":INSTR2:CHANNEL2:VOLT?")
+    assert voltage == "0"
+    mocker4.send(":INSTR2:CHANNEL2:VOLT -13.4")
+    voltage = mocker4.send(":INSTR2:CHANNEL2:VOLT?")
+    assert voltage == "-13.4"

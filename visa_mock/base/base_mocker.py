@@ -1,9 +1,6 @@
 from inspect import signature
-from typing import Dict, Callable, Any, get_type_hints
+from typing import Dict, List, Callable, Any, cast, get_type_hints
 import re
-
-
-__tmp_scpi_dict__: Dict[str, Callable] = {}
 
 
 class MockingError(Exception):
@@ -15,76 +12,114 @@ class AnnotationError(Exception):
 
 
 class SCPIHandler:
+    """
+    SCPI handlers contain *class* methods which are called at runtime when
+    a SCPI message needs to be handled.
 
-    @staticmethod
-    def _get_params_and_annotations(function):
-        parameters = dict(signature(function).parameters)
-        annotations = {
-            "self": lambda x: x
-        }
+    The handler has two tasks:
 
-        annotations.update(get_type_hints(function))
+    1) Because SCPI messages are strings, this handler will cast string
+        values to the appropriate type depending on the annotation of the
+        input method. The method will be called with the recast arguments.
+
+    2) A handler can combine two handlers into one. Each handler handles part
+        of a scpi string, for example ":INSTR:CHANNEL(.*)" and ":VOLTAGE?".
+        The handler of the former returns a mock sub-module instance, containing
+        a handler method for the latter substring.
+    """
+    @classmethod
+    def from_method(cls, method: Callable) -> 'SCPIHandler':
+        """
+        Construct a handler from a class method.
+        """
+        parameters = dict(signature(method).parameters)
 
         try:
-            return_type = annotations.pop("return")
+            parameters.pop("self")
+        except KeyError:
+            raise AnnotationError("This can only decorate class methods")
+
+        type_hints = get_type_hints(method)
+
+        try:
+            return_type = type_hints.pop("return")
         except KeyError:
             raise AnnotationError("All functions must have an annotated return type")
+
+        annotations = list(type_hints.values())
 
         if len(annotations) != len(parameters):
             raise AnnotationError(
                 "This decorator requires all arguments to be annotated"
             )
 
-        return parameters, annotations, return_type
+        return cls(method, annotations, return_type)
 
     @classmethod
-    def combine(cls, handler1: 'SCPIHandler', handler2: 'SCPIHandler'):
+    def combine(
+            cls,
+            handler: 'SCPIHandler',
+            sub_handler: 'SCPIHandler'
+    ) -> 'SCPIHandler':
+        """
+        Combine two handlers, each processing part of a SCPI message.
+        """
+        handler_arg_count = len(handler.annotations)
+        annotations = list(handler.annotations)
+        annotations.extend(sub_handler.annotations)
 
-        parameters = dict(handler1.parameters)
-        annotations = dict(handler1.annotations)
-
-        parameters.update(handler2.parameters)
-        annotations.update(handler2.annotations)
-
-        def function(*args):
-            args1 = args[:len(handler1.parameters)]
-            args2 = args[len(handler1.parameters):]  # NOTE: This is *not* a bug... use 'handler1' here
-
-            return handler2(
-                handler1(*args1),
-                *args2
+        def method(self, *args):
+            handler_args = args[:handler_arg_count]
+            sub_handler_args = args[handler_arg_count:]
+            # The first handler returns a submodule
+            sub_module = handler(self, *handler_args)
+            # 'sub_handler' is a *class* method, meaning that the
+            # first argument needs to be a 'self'. This is
+            # provided by the first handler.
+            return sub_handler(
+                sub_module,
+                *sub_handler_args
             )
 
         return cls(
-            function, parameters, annotations, handler2.return_type
+            method, annotations, sub_handler.return_type
         )
 
     def __init__(
             self,
-            function: Callable,
-            parameters: Dict = None,
-            annotations: Dict = None,
-            return_type: type = None
-    ):
+            method: Callable,
+            annotations: List,
+            return_type: type
+    ) -> None:
+        """
+        The __init__ is never called directly. We use 'from_method' and 'combine'
+        instead
 
-        self.function = function
+        Arguments:
+            method: A method of a mocker class (not an instance method)
+            annotations: A list of types acquired by inspecting the
+                method type hints
+            return_type: Specify the return type of the method.
+        """
+        self.method = method
+        self.annotations = annotations
+        self.return_type = return_type
 
-        if all([parameters, annotations, return_type]):
-            self.parameters = parameters
-            self.annotations = annotations
-            self.return_type = return_type
-            return
-
-        self.parameters, self.annotations, self.return_type = \
-            self._get_params_and_annotations(function)
-
-    def __call__(self, *args):
-
+    def __call__(self, mocker_self, *args):
+        """
+        The values in the arguments are strings because we have parsed a
+        SCPI message string. Convert these string to the appropriate type
+        using the annotations and call the handler method.
+        """
         new_args = [
-            tp(value) for tp, value in zip(self.annotations.values(), args)
+            annotation_type(value)
+            for annotation_type, value in zip(self.annotations, args)
         ]
 
-        return self.function(*new_args)
+        return self.method(mocker_self, *new_args)
+
+
+__tmp_scpi_dict__: Dict[str, SCPIHandler] = {}
 
 
 class MockerMetaClass(type):
@@ -111,7 +146,7 @@ class BaseMocker(metaclass=MockerMetaClass):
     @classmethod
     def scpi(cls, scpi_string: str) -> Callable:
         def decorator(function):
-            handler = SCPIHandler(function)
+            handler = SCPIHandler.from_method(function)
             return_type = handler.return_type
 
             if not isinstance(return_type, MockerMetaClass):
@@ -124,7 +159,7 @@ class BaseMocker(metaclass=MockerMetaClass):
             # For an example, see instruments.py in the folder 'tests\mock_instruments\'
             # and specifically study the class 'Mocker3'
 
-            SubModule = return_type
+            SubModule = cast(MockerMetaClass, return_type)
 
             for scpi_sub_string, sub_handler in SubModule.__scpi_dict__.items():
                 __tmp_scpi_dict__[scpi_string + scpi_sub_string] = SCPIHandler.combine(
@@ -159,4 +194,3 @@ class BaseMocker(metaclass=MockerMetaClass):
 
 
 scpi = BaseMocker.scpi
-
