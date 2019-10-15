@@ -5,39 +5,53 @@ pyvisa-mock aims to provide similar functionality as [pyvisa-sim](https://pyvisa
 ## Example
 
 ```python
+from collections import defaultdict
+from visa import ResourceManager
 from visa_mock.base.base_mocker import BaseMocker, scpi
 from visa_mock.base.register import register_resource
 
-class Mocker(BaseMocker):
+class MockerChannel(BaseMocker): 
     """
-    A mocker class mocking a multi channel voltage source.
+    A mocker channel for a multi channel voltage source. 
     Voltages are zero by default
     """
-
-    def __init__(self):
-        self._voltage = defaultdict(lambda: 0)
-
-    @scpi("\*IDN\?")
-    def idn(self): 
-        """
-        'vendor', 'model', 'serial', 'firmware'
-        """
-        return "Mocker,testing,00000,0.01"
-
+    
+    def __init__(self): 
+        self._voltage = 0
+    
     # Lets define handler functions. Notice how we can be 
     # lazy in our regular expressions (using ".*"). The 
     # typehints will be used to cast strings to the 
     # required types
     
-    @scpi(r":INSTR:CHANNEL(.*):VOLT (.*)")
-    def _set_voltage(self, channel: int, value: float) -> None:
-        self._voltage[channel] = value
+    @scpi(r":VOLT (.*)") 
+    def _set_voltage(self, value: float) -> None:
+        self._voltage = value
+    
+    @scpi(r":VOLT\?")
+    def _get_voltage(self) -> float: 
+        return self._voltage
 
-    @scpi(r":INSTR:CHANNEL(.*):VOLT\?")
-    def _get_voltage(self, channel: int) -> float:
-        return self._voltage[channel]
+
+class Mocker(BaseMocker):
+    """
+    The main mocker class. 
+    """
+
+    def __init__(self):
+        self._channels = defaultdict(MockerChannel)
+
+    @scpi("\*IDN\?")
+    def idn(self) -> str: 
+        """
+        'vendor', 'model', 'serial', 'firmware'
+        """
+        return "Mocker,testing,00000,0.01"
+    
+    @scpi(r":INSTR:CHANNEL(.*)")
+    def _get_channel(self, channel: int) -> MockerChannel:
+        return self._channels[channel] 
         
- 
 register_resource("MOCK0::mock1::INSTR", Mocker())
 
 rc = ResourceManager(visa_library="@mock")
