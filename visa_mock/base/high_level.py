@@ -53,12 +53,14 @@ class MockVisaLibrary(highlevel.VisaLibraryBase):
 
     def new_session(self, session: Session = None) -> int:
 
+        new_session_idx = len(self._sessions) + 1
+
         if session is None:
-            new_session_idx = len(self._sessions) + 1
             session = Session(new_session_idx, "MOCK0::name::INSTR")
 
+        session.session_index = new_session_idx
         self._sessions[session.session_index] = session
-        return session.session_index
+        return new_session_idx
 
     def open_default_resource_manager(self) -> Tuple[int, STATUS_CODE]:
 
@@ -67,7 +69,7 @@ class MockVisaLibrary(highlevel.VisaLibraryBase):
 
     def open(
             self,
-            session_idx: int,
+            manager_session_idx: int,
             resource_name: str,
             access_mode=constants.AccessModes.no_lock,
             open_timeout=constants.VI_TMO_IMMEDIATE
@@ -77,10 +79,10 @@ class MockVisaLibrary(highlevel.VisaLibraryBase):
             raise ValueError(f"Unknown resource {resource_name}")
 
         device = resources[resource_name]
-        session = Session(session_idx, resource_name)
+        session = Session(manager_session_idx, resource_name)
         session.device = device
-        self.new_session(session)
-        return session_idx, constants.StatusCode.success
+        new_session_index = self.new_session(session)
+        return new_session_index, constants.StatusCode.success
 
     def close(self, session_idx: int) -> STATUS_CODE:
         if session_idx not in self._sessions:
