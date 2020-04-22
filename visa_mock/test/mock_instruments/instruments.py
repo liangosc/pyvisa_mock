@@ -9,6 +9,7 @@ class Mocker1(BaseMocker):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._voltage = defaultdict(lambda: 0.0)
 
     @scpi(r":INSTR:CHANNEL(.*):VOLT (.*)")
@@ -27,6 +28,7 @@ class Mocker2(BaseMocker):
     """
 
     def __init__(self):
+        super().__init__()
         self._voltage = defaultdict(lambda: 0.0)
 
     @scpi(r":INSTR:CHANNEL(.*):VOLT (.*)")
@@ -41,6 +43,7 @@ class Mocker2(BaseMocker):
 class MockerChannel(BaseMocker):
 
     def __init__(self):
+        super().__init__()
         self._voltage = 0
 
     @scpi(r":VOLT (.*)")
@@ -55,7 +58,7 @@ class MockerChannel(BaseMocker):
 class Mocker3(BaseMocker):
 
     def __init__(self):
-
+        super().__init__()
         self._channels = {
             1: MockerChannel(),
             2: MockerChannel()
@@ -69,6 +72,7 @@ class Mocker3(BaseMocker):
 class Mocker4(BaseMocker):
 
     def __init__(self):
+        super().__init__()
         self._instruments = {
             1: Mocker3(),
             2: Mocker3()
