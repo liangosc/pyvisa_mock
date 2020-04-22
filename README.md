@@ -17,6 +17,7 @@ class MockerChannel(BaseMocker):
     """
     
     def __init__(self): 
+        super().__init__()
         self._voltage = 0
     
     # Lets define handler functions. Notice how we can be 
@@ -39,6 +40,7 @@ class Mocker(BaseMocker):
     """
 
     def __init__(self):
+        super().__init__()
         self._channels = defaultdict(MockerChannel)
 
     @scpi("\*IDN\?")

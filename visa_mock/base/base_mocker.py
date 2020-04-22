@@ -1,6 +1,7 @@
 from inspect import signature
-from typing import Dict, List, Callable, Any, cast, get_type_hints
+from typing import Dict, List, Callable, Any, cast, get_type_hints, Optional
 import re
+import time
 
 
 class MockingError(Exception):
@@ -104,6 +105,7 @@ class SCPIHandler:
         self.method = method
         self.annotations = annotations
         self.return_type = return_type
+        self.call_delay = None
 
     def __call__(self, mocker_self, *args):
         """
@@ -142,6 +144,15 @@ class MockerMetaClass(type):
 
 class BaseMocker(metaclass=MockerMetaClass):
     __scpi_dict__: Dict[str, Callable] = {}
+
+    def __init__(self, call_delay: float = 0.0):
+        self._call_delay = call_delay
+
+    def set_call_delay(self, call_delay: float, scpi_string: Optional[str] = None):
+        if scpi_string is None:
+            self._call_delay = call_delay
+        else:
+            self.__scpi_dict__[scpi_string].call_delay = call_delay
 
     @classmethod
     def scpi(cls, scpi_string: str) -> Callable:
@@ -189,6 +200,11 @@ class BaseMocker(metaclass=MockerMetaClass):
 
         if not found:
             raise ValueError(f"Unknown SCPI command {scpi_string}")
+
+        if handler.call_delay is not None:
+            time.sleep(handler.call_delay)
+        else:
+            time.sleep(self._call_delay)
 
         return str(handler(self, *args))
 
