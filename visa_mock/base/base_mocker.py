@@ -148,7 +148,20 @@ class BaseMocker(metaclass=MockerMetaClass):
     def __init__(self, call_delay: float = 0.0):
         self._call_delay = call_delay
 
-    def set_call_delay(self, call_delay: float, scpi_string: Optional[str] = None):
+    def set_call_delay(
+            self,
+            call_delay: float,
+            scpi_string: Optional[str] = None
+    ) -> None:
+        """
+        This method set the call delay to either the whole instrument, or the
+        scpi command specified.
+
+        Args:
+            call_delay: the intended delay value in second.
+            scpi_string: when provided, this method will apply the call_delay
+                to this scpi command only.
+        """
         if scpi_string is None:
             self._call_delay = call_delay
         else:
