@@ -16,8 +16,8 @@ class MockerChannel(BaseMocker):
     Voltages are zero by default
     """
     
-    def __init__(self): 
-        super().__init__()
+    def __init__(self, call_delay: float = 0.0):
+        super().__init__(call_delay=call_delay)
         self._voltage = 0
     
     # Lets define handler functions. Notice how we can be 
@@ -39,8 +39,8 @@ class Mocker(BaseMocker):
     The main mocker class. 
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, call_delay: float = 0.0):
+        super().__init__(call_delay=call_delay)
         self._channels = defaultdict(MockerChannel)
 
     @scpi("\*IDN\?")
